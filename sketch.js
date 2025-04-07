@@ -327,14 +327,21 @@ function resetAnimation() {
 }
 
 // Start the animation only when clicking on the button.
-function mouseClicked() {
+function displayStartButton() {
   let pulse = map(sin(frameCount * 0.2), -1, 1, 20, 40);
-  let d = dist(mouseX, mouseY, width/2, height/2);
-  // Only start if click is on the button.
-  if (!animationStarted && d < pulse/2) {
-    animationStarted = true;
+  let centerX = width / 2;
+  let centerY = height / 2;
+  let halfPulse = pulse / 2;
+  if (mouseX > centerX - halfPulse && mouseX < centerX + halfPulse &&
+      mouseY > centerY - halfPulse && mouseY < centerY + halfPulse) {
+    fill(255, 150, 0, 200);  // Change color when hovered.
+  } else {
+    fill(255, 0, 0, 200);
   }
+  noStroke();
+  ellipse(centerX, centerY, pulse, pulse);
 }
+
 
 // Adjust canvas size.
 function windowResized() {
