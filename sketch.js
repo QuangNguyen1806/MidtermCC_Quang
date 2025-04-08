@@ -57,7 +57,7 @@ function draw() {
       darkness -= 0.5;
     }
     
-    // Update the shake factor and global shake
+    // Update the shake factor and global shake.
     shakeFactor = stage * 2;
     let globalShakeX = random(-shakeFactor, shakeFactor);
     let globalShakeY = random(-shakeFactor, shakeFactor);
@@ -143,23 +143,64 @@ function drawRoom() {
   rect(width * 0.75, height * 0.55, width * 0.15, height * 0.4);
 }
 
-// Display a flashing start button that changes color on hover.
+// Draw a heart shape using Bézier curves.
+function drawHeart(x, y, s) {
+  push();
+    translate(x, y);
+    beginShape();
+      vertex(0, 0);
+      bezierVertex(-s / 2, -s / 2, -s, s / 3, 0, s);
+      bezierVertex(s, s / 3, s / 2, -s / 2, 0, 0);
+    endShape(CLOSE);
+  pop();
+}
+
+// Draw a broken heart shape: the heart splits into two halves.
+function drawBrokenHeart(x, y, s) {
+  push();
+    translate(x, y);
+    // Left half of the heart, shifted slightly to the left.
+    push();
+      translate(-s * 0.15, 0);
+      beginShape();
+        vertex(0, 0);
+        bezierVertex(-s / 2, -s / 2, -s, s / 3, s * 0.1, s);
+      endShape(CLOSE);
+    pop();
+    // Right half of the heart, shifted slightly to the right.
+    push();
+      translate(s * 0.15, 0);
+      beginShape();
+        vertex(0, 0);
+        bezierVertex(s / 2, -s / 2, s, s / 3, -s * 0.1, s);
+      endShape(CLOSE);
+    pop();
+  pop();
+}
+
+// Display a flashing start button as a heart shape that breaks in half on hover.
+// When the heart is broken (on hover), it stops beating (static pulse size).
 function displayStartButton() {
-  let pulse = map(sin(frameCount * 0.2), -1, 1, 20, 40);
   let centerX = width / 2;
   let centerY = height / 2;
-  let halfPulse = pulse / 2;
-  // Calculate distance using manual computation: sqrt((dx)^2+(dy)^2)
+  let pulse = map(sin(frameCount * 0.2), -1, 1, 20, 40);
+  
+  // Calculate distance using the Pythagorean theorem.
   let dx = mouseX - centerX;
   let dy = mouseY - centerY;
   let d = sqrt(dx * dx + dy * dy);
-  if (d < halfPulse) {
-    fill(255, 150, 0, 200);
-  } else {
-    fill(255, 0, 0, 200);
-  }
+  
   noStroke();
-  ellipse(centerX, centerY, pulse, pulse);
+  fill(255, 0, 0, 200);
+  
+  if (d < pulse / 2) {
+    // On hover, use a fixed size so the heartbeat stops.
+    let staticPulse = 30;
+    drawBrokenHeart(centerX, centerY, staticPulse);
+  } else {
+    // Otherwise, display the beating heart.
+    drawHeart(centerX, centerY, pulse);
+  }
 }
 
 // Advance the stage and add new marks, cracks, and thoughts.
@@ -455,7 +496,7 @@ function mouseClicked() {
   let pulse = map(sin(frameCount * 0.2), -1, 1, 20, 40);
   let centerX = width / 2;
   let centerY = height / 2;
-  //mouse click place
+  // Manually calculate distance to button center.
   let dx = mouseX - centerX;
   let dy = mouseY - centerY;
   let d = sqrt(dx * dx + dy * dy);
