@@ -6,6 +6,7 @@ let shakeFactor = 0;
 let marks = [];
 let cracks = [];
 let shards = [];
+let thoughts = []; // New array for Thought objects
 
 let animationStarted = false;
 let stageTimer = 0;       // Frames counter for stage progression
@@ -13,13 +14,11 @@ const stageInterval = 120; // Frames between stage advances (~2 sec at 60fps)
 
 let explosionStarted = false;
 let explosionTimer = 0;
-const explosionDelay = 180; // Not used but kept for reference
 
-// Variables for the final sequence
 let finalSequence = false;
 let finalSequenceTimer = 0;
-const finalSequenceDelay = 180; // Frames to show white screen with fallen figure before darkening
-const finalFadeDuration = 150;  // Frames over which fade-to-black occurs
+const finalSequenceDelay = 180;
+const finalFadeDuration = 150;
 
 let person;
 
@@ -32,17 +31,16 @@ function setup() {
 }
 
 function draw() {
-  // If not in final sequence, draw the room background and anxious effects.
   if (!finalSequence) {
     drawRoom();
-  
+
     // If animation hasn't started, show the flashing button.
     if (!animationStarted) {
       displayStartButton();
       return;
     }
     
-    // Automatic stage progression (before final explosion)
+    // Advance stage automatically (before final explosion)
     if (stage < maxStage) {
       stageTimer++;
       if (stageTimer >= stageInterval) {
@@ -51,42 +49,53 @@ function draw() {
       }
     }
     
-    // Slowly update darkness.
+    // Smooth darkness transition without using lerp.
     let targetDarkness = map(stage, 0, maxStage, 0, 255);
     if (darkness < targetDarkness) {
       darkness += 0.5;
+    } else if (darkness > targetDarkness) {
+      darkness -= 0.5;
     }
     
-    // Update shake factor.
+    // Update the shake factor and global shake
     shakeFactor = stage * 2;
     let globalShakeX = random(-shakeFactor, shakeFactor);
     let globalShakeY = random(-shakeFactor, shakeFactor);
     
-    // Draw anxious effects over the room.
-    if (stage < maxStage) {
-      push();
-        translate(globalShakeX, globalShakeY);
-        for (let mark of marks) {
-          mark.update();
-          mark.display();
+    push();
+      translate(globalShakeX, globalShakeY);
+      
+      // Update and display anxiety marks.
+      for (let mark of marks) {
+        mark.update();
+        mark.display();
+      }
+      
+      // Update and display racing thoughts.
+      for (let t of thoughts) {
+        t.update();
+        t.display();
+      }
+      
+      // Draw an overlay with evolving darkness.
+      noStroke();
+      fill(0, darkness);
+      rect(0, 0, width, height);
+      
+      // Expand and display cracks with oscillatory movement.
+      if (stage >= 5) {
+        for (let crack of cracks) {
+          crack.expand();
+          crack.display();
         }
-        noStroke();
-        fill(0, darkness);
-        rect(0, 0, width, height);
-        if (stage >= 5) {
-          for (let crack of cracks) {
-            crack.expand();
-            crack.display();
-          }
-        }
-      pop();
-    }
+      }
+    pop();
     
-    // Update and display the person (falling hasn't started yet).
+    // Update and display the person with micro-twitches.
     person.update(stage, maxStage, shakeFactor);
     person.display();
     
-    // When max stage is reached, trigger explosion effect.
+    // Trigger explosion effect when max stage is reached.
     if (stage >= maxStage) {
       if (!explosionStarted) {
         generateShards();
@@ -96,7 +105,6 @@ function draw() {
         drawExplosionEffect();
       }
       if (finalSequence) {
-        // Switch to white background; let the figure fall.
         background(255);
         person.fallDown();
       }
@@ -135,21 +143,26 @@ function drawRoom() {
   rect(width * 0.75, height * 0.55, width * 0.15, height * 0.4);
 }
 
-// Display a flashing button that changes color on hover.
+// Display a flashing start button that changes color on hover.
 function displayStartButton() {
   let pulse = map(sin(frameCount * 0.2), -1, 1, 20, 40);
-  let d = dist(mouseX, mouseY, width/2, height/2);
-  // If mouse is over the button, change its color.
-  if (d < pulse/2) {
+  let centerX = width / 2;
+  let centerY = height / 2;
+  let halfPulse = pulse / 2;
+  // Calculate distance using manual computation: sqrt((dx)^2+(dy)^2)
+  let dx = mouseX - centerX;
+  let dy = mouseY - centerY;
+  let d = sqrt(dx * dx + dy * dy);
+  if (d < halfPulse) {
     fill(255, 150, 0, 200);
   } else {
     fill(255, 0, 0, 200);
   }
   noStroke();
-  ellipse(width/2, height/2, pulse, pulse);
+  ellipse(centerX, centerY, pulse, pulse);
 }
 
-// Advance stage and add anxiety marks/cracks.
+// Advance the stage and add new marks, cracks, and thoughts.
 function advanceStage() {
   stage++;
   let numNewMarks = stage * 2;
@@ -162,9 +175,14 @@ function advanceStage() {
       cracks.push(new Crack(random(width), random(height)));
     }
   }
+  // Create a few Thought objects to simulate racing internal thoughts.
+  let numNewThoughts = floor(random(1, 4));
+  for (let i = 0; i < numNewThoughts; i++) {
+    thoughts.push(new Thought(random(width), random(height), random(20, 50)));
+  }
 }
 
-// AnxietyMark class.
+// AnxietyMark class with an age property and Perlin noise-based distortions.
 class AnxietyMark {
   constructor(x, y, size) {
     this.baseX = x;
@@ -172,6 +190,7 @@ class AnxietyMark {
     this.size = size;
     this.vertices = [];
     this.numVertices = floor(random(5, 10));
+    this.age = 0; // New age variable to control distortion over time.
     for (let i = 0; i < this.numVertices; i++) {
       let angle = map(i, 0, this.numVertices, 0, TWO_PI);
       let r = this.size * random(0.8, 1.2);
@@ -180,9 +199,13 @@ class AnxietyMark {
   }
   
   update() {
+    this.age += 0.05;
     let distortion = 0.5 + stage * 0.1;
     for (let v of this.vertices) {
-      v.radius += random(-distortion, distortion);
+      // Smooth randomness via Perlin noise.
+      let noiseFactor = noise(v.angle, this.age);
+      let change = map(noiseFactor, 0, 1, -distortion, distortion);
+      v.radius += change;
       v.radius = constrain(v.radius, this.size * 0.7, this.size * 1.3);
     }
   }
@@ -193,8 +216,8 @@ class AnxietyMark {
       stroke(255, 0, 0, 200);
       beginShape();
       for (let v of this.vertices) {
-        let jitterX = random(-3, 3);
-        let jitterY = random(-3, 3);
+        let jitterX = sin(frameCount * 0.1 + v.angle) * 2;
+        let jitterY = cos(frameCount * 0.1 + v.angle) * 2;
         vertex(v.radius * cos(v.angle) + jitterX, v.radius * sin(v.angle) + jitterY);
       }
       endShape(CLOSE);
@@ -202,7 +225,7 @@ class AnxietyMark {
   }
 }
 
-// Crack class.
+// Crack class with an added oscillation effect on the drawn points.
 class Crack {
   constructor(x, y) {
     this.startX = x;
@@ -229,14 +252,17 @@ class Crack {
     strokeWeight(3);
     noFill();
     beginShape();
-    for (let p of this.points) {
-      vertex(p.x, p.y);
+    // Adding a wave-like oscillation to each point.
+    for (let i = 0; i < this.points.length; i++) {
+      let offsetX = sin(frameCount * 0.05 + i) * 2;
+      let offsetY = cos(frameCount * 0.05 + i) * 2;
+      vertex(this.points[i].x + offsetX, this.points[i].y + offsetY);
     }
     endShape();
   }
 }
 
-// Shard class.
+// Shard class remains much the same.
 class Shard {
   constructor(x, y) {
     this.x = x;
@@ -270,14 +296,14 @@ class Shard {
   }
 }
 
-// Generate shards.
+// Generate shards for the explosion effect.
 function generateShards() {
   for (let i = 0; i < 60; i++) {
     shards.push(new Shard(random(width), random(height / 2)));
   }
 }
 
-// Draw explosion effect; when shards fade, start final sequence.
+// Draw the explosion effect and trigger the final sequence when shards fade.
 function drawExplosionEffect() {
   background(255);
   let activeShards = false;
@@ -294,30 +320,14 @@ function drawExplosionEffect() {
   }
 }
 
-// Final sequence: white screen with fallen figure, then fade to black.
-function drawFinalSequence() {
-  background(255);
-  person.displayFallen();
-  
-  finalSequenceTimer++;
-  if (finalSequenceTimer > finalSequenceDelay) {
-    let fadeAlpha = map(finalSequenceTimer, finalSequenceDelay, finalSequenceDelay + finalFadeDuration, 0, 255);
-    noStroke();
-    fill(0, fadeAlpha);
-    rect(0, 0, width, height);
-    if (fadeAlpha >= 255) {
-      resetAnimation();
-    }
-  }
-}
-
-// Reset the animation.
+// Reset the entire animation for a new cycle.
 function resetAnimation() {
   stage = 0;
   darkness = 0;
   marks = [];
   cracks = [];
   shards = [];
+  thoughts = [];
   explosionStarted = false;
   finalSequence = false;
   finalSequenceTimer = 0;
@@ -326,51 +336,29 @@ function resetAnimation() {
   person.reset();
 }
 
-// Start the animation only when clicking on the button.
-function displayStartButton() {
-  let pulse = map(sin(frameCount * 0.2), -1, 1, 20, 40);
-  let centerX = width / 2;
-  let centerY = height / 2;
-  let halfPulse = pulse / 2;
-  if (mouseX > centerX - halfPulse && mouseX < centerX + halfPulse &&
-      mouseY > centerY - halfPulse && mouseY < centerY + halfPulse) {
-    fill(255, 150, 0, 200);  // Change color when hovered.
-  } else {
-    fill(255, 0, 0, 200);
-  }
-  noStroke();
-  ellipse(centerX, centerY, pulse, pulse);
-}
-
-
-// Adjust canvas size.
-function windowResized() {
-  resizeCanvas(windowWidth, windowHeight);
-}
-
-/* ----------------------------------
-   Person class
-   ---------------------------------- */
+// Person class with micro-twitches and easing movement.
 class Person {
   constructor(x, y) {
     this.x = x;
     this.y = y;
-    this.collapseProgress = 0; // 0 = standing, 1 = fully collapsed
-    this.shakeX = 0;
-    this.shakeY = 0;
-    this.fallProgress = 0; // 0 = not fallen, 1 = fully fallen (horizontal)
+    this.collapseProgress = 0;
+    this.fallProgress = 0;
+    this.twitchOffset = { x: 0, y: 0 };
+    this.twitchTimer = 0;
   }
   
   update(stage, maxStage, shakeAmount) {
     this.collapseProgress = constrain(stage / maxStage, 0, 1);
-    this.shakeX = random(-shakeAmount, shakeAmount);
-    this.shakeY = random(-shakeAmount, shakeAmount);
+    // Add micro-twitches using sine oscillation combined with random displacements.
+    this.twitchTimer += 0.1;
+    let twitchMagnitude = map(this.collapseProgress, 0, 1, 0, 5);
+    this.twitchOffset.x = sin(this.twitchTimer) * twitchMagnitude + random(-1, 1);
+    this.twitchOffset.y = cos(this.twitchTimer) * twitchMagnitude + random(-1, 1);
   }
   
-  // Display stickman during anxious/collapsing phase.
   display() {
     push();
-      translate(this.x + this.shakeX, this.y + this.shakeY);
+      translate(this.x + this.twitchOffset.x, this.y + this.twitchOffset.y);
       let collapseAngle = map(this.collapseProgress, 0, 1, 0, PI / 2);
       rotate(collapseAngle);
       
@@ -393,14 +381,14 @@ class Person {
     pop();
   }
   
-  // Gradually increase fallProgress.
+  // Gradually increase the fall progress.
   fallDown() {
     if (this.fallProgress < 1) {
       this.fallProgress += 0.005;
     }
   }
   
-  // Display the fallen stickman.
+  // Display the collapsed (fallen) stickman.
   displayFallen() {
     push();
       translate(this.x, this.y);
@@ -425,5 +413,58 @@ class Person {
     this.y = height - 150;
     this.collapseProgress = 0;
     this.fallProgress = 0;
+    this.twitchTimer = 0;
   }
+}
+
+// New Thought class to represent transient, racing thoughts.
+class Thought {
+  constructor(x, y, size) {
+    this.x = x;
+    this.y = y;
+    this.size = size;
+    this.alpha = 200;
+    this.life = random(100, 200);
+    this.age = 0;
+    // Initial movement parameters using polar coordinates.
+    this.angle = random(TWO_PI);
+    this.speed = random(0.5, 2);
+  }
+  
+  update() {
+    this.age++;
+    // Move using a slow radial motion.
+    this.x += cos(this.angle) * this.speed;
+    this.y += sin(this.angle) * this.speed;
+    // Fade out gradually.
+    this.alpha = map(this.age, 0, this.life, 200, 0);
+  }
+  
+  display() {
+    push();
+      noStroke();
+      fill(100, 100, 255, this.alpha);
+      // Oscillate the size slightly to enhance the pulsating effect.
+      let currentSize = this.size + sin(frameCount * 0.2) * 5;
+      ellipse(this.x, this.y, currentSize, currentSize);
+    pop();
+  }
+}
+
+function mouseClicked() {
+  let pulse = map(sin(frameCount * 0.2), -1, 1, 20, 40);
+  let centerX = width / 2;
+  let centerY = height / 2;
+  //mouse click place
+  let dx = mouseX - centerX;
+  let dy = mouseY - centerY;
+  let d = sqrt(dx * dx + dy * dy);
+  // Start animation only if the button is clicked.
+  if (!animationStarted && d < pulse / 2) {
+    animationStarted = true;
+  }
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
 }
